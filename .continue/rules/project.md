@@ -12,17 +12,23 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Website Reverse-Engineer Template
 
 ## What This Is
-A reusable template for reverse-engineering any website into a clean, modern Next.js codebase using AI coding agents. The Next.js + shadcn/ui + Tailwind v4 base is pre-scaffolded — just run `/clone-website-superduck <url1> [<url2> ...]`.
+A reusable template for reverse-engineering any website into a clean, modern codebase using AI coding agents. Two interchangeable framework templates are pre-scaffolded under `templates/`:
+- `templates/nextjs/` — Next.js 16 (App Router, React 19)
+- `templates/tanstack-start/` — TanStack Start RC (TanStack Router, Vite)
+
+Both share the same shadcn/ui + Tailwind v4 component layer and the same SuperDuck-driven extraction pipeline. Pick one at clone time with `--framework nextjs|tanstack` (default: `nextjs`): `/clone-website-superduck <url1> [<url2> ...] [--framework nextjs|tanstack]`.
 
 Browser automation is powered by **SuperDuck** — an open-source Chrome/Edge extension that exposes the user's real browser (with existing cookies and login state) to AI agents via the `superduck` CLI. SuperDuck works with any model (DeepSeek, Qwen, Kimi, Gemini, GPT, or any OpenAI-compatible API) and has no region restrictions. It is the only browser backend this project supports — the clone pipeline will not run without it.
 
 ## Tech Stack
-- **Framework:** Next.js 16 (App Router, React 19, TypeScript strict)
-- **UI:** shadcn/ui (Radix primitives, Tailwind CSS v4, `cn()` utility)
+- **Frameworks (pick one at clone time):**
+  - `templates/nextjs/` — Next.js 16 (App Router, React 19, `next/font`, TypeScript strict)
+  - `templates/tanstack-start/` — TanStack Start RC (TanStack Router, Vite, `@fontsource-variable`)
+- **UI:** shadcn/ui (Base UI primitives, Tailwind CSS v4, `cn()` utility) — shared by both templates
 - **Icons:** Lucide React (default — will be replaced/supplemented by extracted SVGs)
 - **Styling:** Tailwind CSS v4 with oklch design tokens
 - **Browser automation:** SuperDuck CLI (`superduck` command, driven through Bash)
-- **Deployment:** Vercel
+- **Deployment:** Vercel (Next.js native; TanStack Start via its Vercel adapter)
 
 ## Prerequisites
 
@@ -33,11 +39,13 @@ All are **hard prerequisites** — the skill aborts at Pre-Flight if any is miss
 - An AI coding agent (Claude Code recommended, but any agent that can run Bash works)
 
 ## Commands
-- `npm run dev` — Start dev server
-- `npm run build` — Production build
-- `npm run lint` — ESLint check
-- `npm run typecheck` — TypeScript check
-- `npm run check` — Run lint + typecheck + build
+The repo is an npm workspace with two templates. Run commands against a specific template with `-w`:
+- `npm -w nextjs run dev` / `npm -w tanstack-start run dev` — Start dev server
+- `npm -w nextjs run build` / `npm -w tanstack-start run build` — Production build
+- `npm -w nextjs run lint` / `npm -w tanstack-start run lint` — ESLint check
+- `npm -w nextjs run typecheck` / `npm -w tanstack-start run typecheck` — TypeScript check
+- `npm -w nextjs run check` / `npm -w tanstack-start run check` — Run lint + typecheck + build
+- `npm run check` — Run `check` for both templates
 
 ## Code Style
 - TypeScript strict mode, no `any`
@@ -54,25 +62,33 @@ All are **hard prerequisites** — the skill aborts at Pre-Flight if any is miss
 
 ## Project Structure
 ```
-src/
-  app/              # Next.js routes
-  components/       # React components
-    ui/             # shadcn/ui primitives
-    icons.tsx       # Extracted SVG icons as React components
-  lib/
-    utils.ts        # cn() utility (shadcn)
-  types/            # TypeScript interfaces
-  hooks/            # Custom React hooks
-public/
-  images/           # Downloaded images from target site
-  videos/           # Downloaded videos from target site
-  seo/              # Favicons, OG images, webmanifest
+templates/
+  nextjs/           # Next.js 16 template (App Router)
+    src/
+      app/            # routes (layout.tsx, page.tsx, globals.css)
+      components/     # React components
+        ui/             # shadcn/ui primitives
+        icons.tsx       # Extracted SVG icons as React components
+      lib/utils.ts     # cn() utility (shadcn)
+      types/            # TypeScript interfaces
+      hooks/            # Custom React hooks
+    public/            # images/, videos/, seo/ (downloaded from target)
+  tanstack-start/   # TanStack Start RC template (TanStack Router + Vite)
+    src/
+      routes/          # __root.tsx, index.tsx (createFileRoute)
+      styles/app.css   # global CSS (tokens, fonts via @fontsource-variable)
+      components/      # same shadcn/ui layer as nextjs
+      lib/utils.ts
+      types/ hooks/
+    public/
 docs/
   research/         # Inspection output (design tokens, components, layout)
   design-references/ # Screenshots and visual references
 scripts/
   fullpage-screenshot.sh  # SuperDuck-based full-page screenshot stitching
   download-assets.mjs     # Asset download script (written during clone)
+  sync-agent-rules.sh     # Regenerate agent instruction files from AGENTS.md
+  sync-skills.mjs         # Regenerate skill for all 9 supported platforms
 ```
 
 ## MOST IMPORTANT NOTES

@@ -3,11 +3,13 @@ node_modules/
 .pnp
 .pnp.js
 
-# Build
-.next/
-out/
-build/
-dist/
+# Build output
+**/.next/
+**/.output/
+**/.vinxi/
+**/out/
+**/build/
+**/dist/
 
 # Environment
 .env
@@ -33,7 +35,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
+**/next-env.d.ts
 
 # Vercel
 .vercel

@@ -6,6 +6,12 @@
 
 You are about to reverse-engineer and rebuild **the target URL provided by the user** as pixel-perfect clones.
 
+This project ships **two interchangeable framework templates** under `templates/`:
+- `templates/nextjs/` — Next.js 16 (App Router, `next/font`, `export const metadata`)
+- `templates/tanstack-start/` — TanStack Start RC (TanStack Router, `@fontsource-variable`, route `head()`)
+
+The clone pipeline is framework-agnostic — SuperDuck extraction, spec files, asset downloads, and builder dispatch are identical for both. Only the **foundation layer** (root layout, fonts, global CSS path, page route, metadata) differs. You select the template in Pre-Flight step 0 and translate all framework-specific paths via the Framework Path Map.
+
 When multiple URLs are provided, process them independently and in parallel where possible, while keeping each site's extraction artifacts isolated in dedicated folders (for example, `docs/research/<hostname>/`).
 
 This is not a two-phase process (inspect then build). You are a **foreman walking the job site** — as you inspect each section of the page, you write a detailed specification to a file, then hand that file to a specialist builder agent with everything they need. Extraction and construction happen in parallel, but extraction is meticulous and produces auditable artifacts.
@@ -55,6 +61,30 @@ If the user provides additional instructions (specific fidelity level, customiza
 
 ## Pre-Flight
 
+0. **Select the target framework.** Parse `--framework nextjs|tanstack` from `the target URL provided by the user` (default: `nextjs`). Set shell vars for the rest of the session:
+   ```bash
+   case "$FW_FLAG" in
+     tanstack) FW=tanstack-start; TPL=templates/tanstack-start ;;
+     *)        FW=nextjs;         TPL=templates/nextjs ;;
+   esac
+   ```
+   All subsequent `npm run` commands MUST run inside the selected workspace: `npm -w "$FW" run <script>`. All file paths below are relative to the repo root unless noted; translate Next.js-conventional paths via the **Framework Path Map**:
+
+   | What | Next.js (`FW=nextjs`, `templates/nextjs/`) | TanStack Start (`FW=tanstack-start`, `templates/tanstack-start/`) |
+   |------|--------------------------------------------|-------------------------------------------------------------------|
+   | Root layout / HTML shell | `src/app/layout.tsx` — `export const metadata`, `next/font/google` or `next/font/local` | `src/routes/__root.tsx` — `head()` returns `{ meta, links }`, fonts via `@import "@fontsource-variable/<name>"` at top of `src/styles/app.css` |
+   | Home page | `src/app/page.tsx` — `export default function Page()` | `src/routes/index.tsx` — `createFileRoute('/')({ component })` |
+   | Nested page `/foo/bar` | `src/app/foo/bar/page.tsx` | `src/routes/foo/bar.tsx` — `createFileRoute('/foo/bar')(...)` |
+   | Global CSS | `src/app/globals.css` | `src/styles/app.css` |
+   | Fonts | `next/font/google` / `next/font/local` in `layout.tsx`; sets `--font-geist-sans` CSS var | `@import "@fontsource-variable/<name>"` at top of `app.css`; set `--font-sans` / `--font-mono` in the `@theme inline` block |
+   | Metadata / SEO | `export const metadata: Metadata` in `layout.tsx` | `head()` on the route — `meta` array + `links` array |
+   | Client component | `"use client"` directive at top | Not needed (client-first by default); harmless if present |
+   | Path alias | `@/* → ./src/*` | `@/* → ./src/*` (same) |
+   | Build / typecheck / lint | `npm -w nextjs run build\|typecheck\|lint` | `npm -w tanstack-start run build\|typecheck\|lint` |
+   | Dev server | `npm -w nextjs run dev` (port 3000) | `npm -w tanstack-start run dev` (port 3000) |
+
+   When a step below says "update `layout.tsx`" or "update `globals.css`", translate it via this map. When it says `npm run build`, run `npm -w "$FW" run build`.
+
 1. **SuperDuck is a hard prerequisite — do not proceed until it passes.** Run `superduck doctor` to verify the extension and native host are working. If it fails, STOP: tell the user to run `superduck setup` and retry, and do not begin any other step until `superduck doctor` exits clean. Then open a tab and verify it can navigate:
    ```bash
    TAB=$(superduck tab_group new | grep -o 'Tab ID: [0-9]*' | grep -o '[0-9]*')
@@ -63,7 +93,7 @@ If the user provides additional instructions (specific fidelity level, customiza
    ```
    If `superduck` is not installed, ask the user to install it (`npm install -g superduck-cli && superduck setup`) before proceeding. SuperDuck is the only browser backend this skill supports — there is no fallback to a browser MCP, Playwright, Puppeteer, or any other tool. If the user cannot install SuperDuck, the clone cannot run; tell them so and stop.
 2. Parse `the target URL provided by the user` as one or more URLs. Normalize and validate each URL; if any are invalid, ask the user to correct them before proceeding. For each valid URL, navigate to it via `superduck --tab "$TAB" navigate <url>` and verify with `context`.
-3. Verify the base project builds: `npm run build`. The Next.js + shadcn/ui + Tailwind v4 scaffold should already be in place. If not, tell the user to set it up first.
+3. Verify the base project builds: `npm -w "$FW" run build`. The selected template's shadcn/ui + Tailwind v4 scaffold should already be in place under `templates/$FW/`. If not, tell the user to set it up first.
 4. Create the output directories if they don't exist: `docs/research/`, `docs/research/components/`, `docs/design-references/`, `scripts/`. For multiple clones, also prepare per-site folders like `docs/research/<hostname>/` and `docs/design-references/<hostname>/`.
 5. When working with multiple sites in one command, optionally confirm whether to run them in parallel (recommended, if resources allow) or sequentially to avoid overload.
 
@@ -150,7 +180,7 @@ The spec file is not optional. It is not a nice-to-have. If you dispatch a build
 
 ### 9. Build Must Always Compile
 
-Every builder agent must verify `npx tsc --noEmit` passes before finishing. After merging worktrees, you verify `npm run build` passes. A broken build is never acceptable, even temporarily.
+Every builder agent must verify `npm -w "$FW" run typecheck` passes before finishing. After merging worktrees, you verify `npm -w "$FW" run build` passes. A broken build is never acceptable, even temporarily. Builder agents work inside the `templates/$FW/` directory, so they can also run `npx tsc --noEmit` directly from there.
 
 ## Phase 1: Reconnaissance
 
@@ -182,7 +212,7 @@ superduck --tab "$TAB" zoom 100 200 800 600 --output docs/design-references/<sec
 
 Extract these from the page before doing anything else. All JS runs via `superduck --tab "$TAB" exec` — remember to pipe through `strip_tc`.
 
-**Fonts** — Inspect `<link>` tags for Google Fonts or self-hosted fonts. Check computed `font-family` on key elements (headings, body, code, labels). Document every family, weight, and style actually used. Configure them in `src/app/layout.tsx` using `next/font/google` or `next/font/local`.
+**Fonts** — Inspect `<link>` tags for Google Fonts or self-hosted fonts. Check computed `font-family` on key elements (headings, body, code, labels). Document every family, weight, and style actually used. Configure them per the Framework Path Map: Next.js uses `next/font/google` or `next/font/local` in `layout.tsx`; TanStack Start uses `@import "@fontsource-variable/<name>"` (or `@fontsource/<name>` for non-variable fonts) at the top of `src/styles/app.css`, plus the matching `--font-sans` / `--font-mono` entries in the `@theme inline` block.
 
 ```bash
 superduck --tab "$TAB" exec "$(cat <<'JS'
@@ -194,9 +224,9 @@ JS
 )" | strip_tc
 ```
 
-**Colors** — Extract the site's color palette from computed styles across the page. Update `src/app/globals.css` with the target's actual colors in the `:root` and `.dark` CSS variable blocks. Map them to shadcn's token names (background, foreground, primary, muted, etc.) where they fit. Add custom properties for colors that don't map to shadcn tokens.
+**Colors** — Extract the site's color palette from computed styles across the page. Update the template's global CSS (see Framework Path Map: `src/app/globals.css` for Next.js, `src/styles/app.css` for TanStack Start) with the target's actual colors in the `:root` and `.dark` CSS variable blocks. Map them to shadcn's token names (background, foreground, primary, muted, etc.) where they fit. Add custom properties for colors that don't map to shadcn tokens.
 
-**Favicons & Meta** — Download favicons, apple-touch-icons, OG images, webmanifest to `public/seo/`. Update `layout.tsx` metadata. Enumerate them via `exec`:
+**Favicons & Meta** — Download favicons, apple-touch-icons, OG images, webmanifest to `templates/$FW/public/seo/`. Update metadata in the root layout (see Framework Path Map: `layout.tsx` `export const metadata` for Next.js, `__root.tsx` `head()` for TanStack Start). Enumerate them via `exec`:
 ```bash
 superduck --tab "$TAB" exec "$(cat <<'JS'
 JSON.stringify([...document.querySelectorAll('link[rel*="icon"], link[rel="manifest"], link[rel="apple-touch-icon"], meta[property*="og:"]')].map(l => ({ rel: l.rel, href: l.href || l.content, sizes: l.sizes?.toString() })))
@@ -204,7 +234,7 @@ JS
 )" | strip_tc
 ```
 
-**Global UI patterns** — Identify any site-wide CSS or JS: custom scrollbar hiding, scroll-snap on the page container, global keyframe animations, backdrop filters, gradients used as overlays, **smooth scroll libraries** (Lenis, Locomotive Scroll — check for `.lenis`, `.locomotive-scroll`, or custom scroll container classes). Add these to `globals.css` and note any libraries that need to be installed.
+**Global UI patterns** — Identify any site-wide CSS or JS: custom scrollbar hiding, scroll-snap on the page container, global keyframe animations, backdrop filters, gradients used as overlays, **smooth scroll libraries** (Lenis, Locomotive Scroll — check for `.lenis`, `.locomotive-scroll`, or custom scroll container classes). Add these to the template's global CSS (see Framework Path Map) and note any libraries that need to be installed.
 
 ### Mandatory Interaction Sweep
 
@@ -265,14 +295,14 @@ Save this as `docs/research/PAGE_TOPOLOGY.md` — it becomes your assembly bluep
 
 ## Phase 2: Foundation Build
 
-This is sequential. Do it yourself (not delegated to an agent) since it touches many files:
+This is sequential. Do it yourself (not delegated to an agent) since it touches many files. All paths are under `templates/$FW/` — translate via the Framework Path Map.
 
-1. **Update fonts** in `layout.tsx` to match the target site's actual fonts
-2. **Update globals.css** with the target's color tokens, spacing values, keyframe animations, utility classes, and any **global scroll behaviors** (Lenis, smooth scroll CSS, scroll-snap on body)
-3. **Create TypeScript interfaces** in `src/types/` for the content structures you've observed
-4. **Extract SVG icons** — find all inline `<svg>` elements on the page, deduplicate them, and save as named React components in `src/components/icons.tsx`. Name them by visual function (e.g., `SearchIcon`, `ArrowRightIcon`, `LogoIcon`).
-5. **Download global assets** — write and run a Node.js script (`scripts/download-assets.mjs`) that downloads all images, videos, and other binary assets from the page to `public/`. Preserve meaningful directory structure.
-6. Verify: `npm run build` passes
+1. **Update fonts** in the root layout (see Framework Path Map) to match the target site's actual fonts. Next.js: `next/font/google` or `next/font/local` in `layout.tsx`. TanStack Start: `@import "@fontsource-variable/<name>"` at the top of `src/styles/app.css` and set `--font-sans` / `--font-mono` in the `@theme inline` block.
+2. **Update the template's global CSS** (see Framework Path Map) with the target's color tokens, spacing values, keyframe animations, utility classes, and any **global scroll behaviors** (Lenis, smooth scroll CSS, scroll-snap on body)
+3. **Create TypeScript interfaces** in `templates/$FW/src/types/` for the content structures you've observed
+4. **Extract SVG icons** — find all inline `<svg>` elements on the page, deduplicate them, and save as named React components in `templates/$FW/src/components/icons.tsx`. Name them by visual function (e.g., `SearchIcon`, `ArrowRightIcon`, `LogoIcon`).
+5. **Download global assets** — write and run a Node.js script (`scripts/download-assets.mjs`) that downloads all images, videos, and other binary assets from the page to `templates/$FW/public/`. Preserve meaningful directory structure.
+6. Verify: `npm -w "$FW" run build` passes
 
 ### Asset Discovery Script Pattern
 
@@ -487,7 +517,7 @@ Based on complexity, dispatch builder agent(s) in worktree(s):
 - Path to the section screenshot in `docs/design-references/`
 - Which shared components to import (`icons.tsx`, `cn()`, shadcn primitives)
 - The target file path (e.g., `src/components/HeroSection.tsx`)
-- Instruction to verify with `npx tsc --noEmit` before finishing
+- Instruction to verify with `npm -w "$FW" run typecheck` before finishing
 - For responsive behavior: the specific breakpoint values and what changes
 
 **Don't wait.** As soon as you've dispatched the builder(s) for one section, move to extracting the next section. Builders work in parallel in their worktrees while you continue extraction.
@@ -497,26 +527,26 @@ Based on complexity, dispatch builder agent(s) in worktree(s):
 As builder agents complete their work:
 - Merge their worktree branches into main
 - You have full context on what each agent built, so resolve any conflicts intelligently
-- After each merge, verify the build still passes: `npm run build`
+- After each merge, verify the build still passes: `npm -w "$FW" run build`
 - If a merge introduces type errors, fix them immediately
 
 The extract → spec → dispatch → merge cycle continues until all sections are built.
 
 ## Phase 4: Page Assembly
 
-After all sections are built and merged, wire everything together in `src/app/page.tsx`:
+After all sections are built and merged, wire everything together in the home page route (see Framework Path Map: `src/app/page.tsx` for Next.js, `src/routes/index.tsx` — inside the `createFileRoute('/')` component — for TanStack Start):
 
 - Import all section components
 - Implement the page-level layout from your topology doc (scroll containers, column structures, sticky positioning, z-index layering)
 - Connect real content to component props
 - Implement page-level behaviors: scroll snap, scroll-driven animations, dark-to-light transitions, intersection observers, smooth scroll (Lenis etc.)
-- Verify: `npm run build` passes clean
+- Verify: `npm -w "$FW" run build` passes clean
 
 ## Phase 5: Visual QA Diff
 
 After assembly, do NOT declare the clone complete. Take side-by-side comparison screenshots:
 
-1. Open the target site in one SuperDuck tab and your clone dev server (`npm run dev`) in another:
+1. Open the target site in one SuperDuck tab and your clone dev server (`npm -w "$FW" run dev`) in another:
    ```bash
    TAB_ORIG=$(superduck tab_group new | grep -o 'Tab ID: [0-9]*' | grep -o '[0-9]*')
    superduck --tab "$TAB_ORIG" navigate <target-url>
@@ -581,6 +611,6 @@ When done, report:
 - Total components created
 - Total spec files written (should match components)
 - Total assets downloaded (images, videos, SVGs, fonts)
-- Build status (`npm run build` result)
+- Build status (`npm -w "$FW" run build` result)
 - Visual QA results (any remaining discrepancies)
 - Any known gaps or limitations

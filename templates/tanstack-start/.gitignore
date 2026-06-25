@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+.output/
+.vinxi/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel

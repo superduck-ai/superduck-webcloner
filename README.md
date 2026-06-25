@@ -3,9 +3,9 @@
 
 # Superduck WebCloner
 
-Reverse-engineer any website into a clean Next.js codebase — powered by [SuperDuck](https://github.com/superduck-ai/superduck) browser automation.
+Reverse-engineer any website into a clean Next.js or TanStack Start codebase — powered by [SuperDuck](https://github.com/superduck-ai/superduck) browser automation.
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A524-green)](https://nodejs.org/) [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/) [![SuperDuck](https://img.shields.io/badge/browser-SuperDuck-4A90D9)](https://github.com/superduck-ai/superduck)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A524-green)](https://nodejs.org/) [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/) [![TanStack Start](https://img.shields.io/badge/TanStack%20Start-RC-1)](https://tanstack.com/start) [![SuperDuck](https://img.shields.io/badge/browser-SuperDuck-4A90D9)](https://github.com/superduck-ai/superduck)
 
 </div>
 
@@ -73,7 +73,8 @@ SuperDuck gives the agent full CDP control of your real Chrome — same cookies,
 
    Then in the agent:
    ```
-   /clone-website-superduck https://example.com
+   /clone-website-superduck https://example.com                          # Next.js (default)
+   /clone-website-superduck https://example.com --framework tanstack    # TanStack Start
    ```
 
    No `--chrome` flag needed. SuperDuck handles the browser.
@@ -89,7 +90,7 @@ Target URL ──▶ superduck navigate ──▶ Phase 1: Reconnaissance
                                           └─ interaction sweep (scroll / click / hover / responsive)
                                                       │
                                                       ▼
-                                   Phase 2: Foundation (fonts, globals.css, types, icons, assets)
+                                   Phase 2: Foundation (fonts, global CSS, types, icons, assets)
                                                       │
                                                       ▼
                                    Phase 3: per section ─▶ extract (superduck exec)
@@ -97,7 +98,7 @@ Target URL ──▶ superduck navigate ──▶ Phase 1: Reconnaissance
                                                          ─▶ dispatch builder agent (worktree) ─▶ merge
                                                       │
                                                       ▼
-                                   Phase 4: Page Assembly (page.tsx, page-level behaviors)
+                                   Phase 4: Page Assembly (home route, page-level behaviors)
                                                       │
                                                       ▼
                                    Phase 5: Visual QA Diff (side-by-side in 2 superduck tabs)
@@ -144,8 +145,10 @@ All four are **hard prerequisites** — the skill aborts at Pre-Flight until eac
 
 ## Tech Stack
 
-- **Next.js 16** — App Router, React 19, TypeScript strict
-- **shadcn/ui** — Radix primitives + Tailwind CSS v4
+Two interchangeable framework templates, shared component layer:
+- **Next.js 16** (`templates/nextjs/`) — App Router, React 19, `next/font`, TypeScript strict
+- **TanStack Start RC** (`templates/tanstack-start/`) — TanStack Router, Vite, `@fontsource-variable`, `createServerFn`
+- **shadcn/ui** — Base UI primitives + Tailwind CSS v4 (shared by both)
 - **Tailwind CSS v4** — oklch design tokens
 - **Lucide React** — default icons (replaced by extracted SVGs during cloning)
 - **SuperDuck** — browser automation via CLI (full CDP access to the user's real Chrome)
@@ -153,12 +156,16 @@ All four are **hard prerequisites** — the skill aborts at Pre-Flight until eac
 
 ## Commands
 
+The repo is an npm workspace with two templates. Target one with `-w`:
+
 ```bash
-npm run dev        # Start dev server
-npm run build      # Production build
-npm run lint       # ESLint check
-npm run typecheck  # TypeScript check
-npm run check      # Run lint + typecheck + build
+npm -w nextjs run dev           # Next.js dev server
+npm -w tanstack-start run dev   # TanStack Start dev server
+npm -w nextjs run build         # Production build (Next.js)
+npm -w tanstack-start run build # Production build (TanStack Start)
+npm -w nextjs run check         # lint + typecheck + build (Next.js)
+npm -w tanstack-start run check # lint + typecheck + build (TanStack Start)
+npm run check                   # check both templates
 ```
 
 ## Updating for Other Platforms
@@ -175,33 +182,37 @@ Each script regenerates the platform-specific copies automatically. Agents that 
 ## Project Structure
 
 ```
-src/
-  app/              # Next.js routes
-  components/       # React components
-    ui/             # shadcn/ui primitives
-    icons.tsx       # Extracted SVG icons
-  lib/utils.ts      # cn() utility
-  types/            # TypeScript interfaces
-  hooks/            # Custom React hooks
-public/
-  images/           # Downloaded images from target
-  videos/           # Downloaded videos from target
-  seo/              # Favicons, OG images
+templates/
+  nextjs/             # Next.js 16 template (App Router)
+    src/
+      app/              # layout.tsx, page.tsx, globals.css
+      components/ui/    # shadcn/ui primitives
+      lib/utils.ts      # cn() utility
+      types/ hooks/     # TypeScript interfaces, custom hooks
+    public/             # images/, videos/, seo/ (downloaded from target)
+  tanstack-start/     # TanStack Start RC template (TanStack Router + Vite)
+    src/
+      routes/           # __root.tsx, index.tsx (createFileRoute)
+      styles/app.css    # global CSS (tokens, @fontsource-variable fonts)
+      components/ui/    # same shadcn/ui layer
+      lib/utils.ts
+      types/ hooks/
+    public/
 docs/
-  research/         # Extraction output & component specs
-  design-references/ # Screenshots
+  research/           # Extraction output & component specs
+  design-references/  # Screenshots
 scripts/
   fullpage-screenshot.sh  # SuperDuck scroll-and-stitch full-page capture
   sync-agent-rules.sh     # Regenerate agent instruction files from AGENTS.md
   sync-skills.mjs         # Regenerate /clone-website-superduck for all platforms
-AGENTS.md           # Agent instructions (single source of truth)
-CLAUDE.md           # Claude Code config (imports AGENTS.md)
-GEMINI.md           # Gemini CLI config (imports AGENTS.md)
+AGENTS.md             # Agent instructions (single source of truth)
+CLAUDE.md             # Claude Code config (imports AGENTS.md)
+GEMINI.md             # Gemini CLI config (imports AGENTS.md)
 ```
 
 ## Use Cases
 
-- **Platform migration** — rebuild a site you own from WordPress/Webflow/Squarespace into a modern Next.js codebase
+- **Platform migration** — rebuild a site you own from WordPress/Webflow/Squarespace into a modern Next.js or TanStack Start codebase
 - **Lost source code** — your site is live but the repo is gone, the developer left, or the stack is legacy. Get the code back in a modern format
 - **Learning** — deconstruct how production sites achieve specific layouts, animations, and responsive behavior by working with real code
 
